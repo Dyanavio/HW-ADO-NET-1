@@ -1,69 +1,208 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Data;
+using System.Data.Common;
 using System.Data.SqlClient;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Net.Http.Headers;
+
 
 namespace HW_ADO_NET_1
 {
     class Program
     {
-        static void Main(string[] args)
+        private static readonly string connectionString = "Data Source=THERION\\SQLEXPRESS;Initial Catalog = Provision; Integrated Security=True";
+        private static void RunMainMenu()
         {
             try
             {
-                string connectionString = "Data Source=THERION\\SQLEXPRESS;Initial Catalog = Provision; Integrated Security=True";
-                //string connectionString = "";
-                var table = GetRecords(connectionString);
-                if (table.Rows.Count == 0) throw new Exception("No records or unsuccessful connection attempt");
-                Console.ForegroundColor = ConsoleColor.DarkGreen;
-                Console.WriteLine("Successfully received data from database: Provision");
+                Console.ForegroundColor = ConsoleColor.DarkCyan;
+                Console.WriteLine("------- Provision Database -------");
                 Console.ResetColor();
-                OutputRecords(table);
+                int input;
+                do
+                {
+                    Console.WriteLine("Options:\n\t1 - Output all\n\t2 - Show min amount of calories\n\t3 - Output products by type\n\t4 - Show all products with cal below indicated\n\t0 - Exit");
+                    Console.Write("Input: ");
+                    input = Convert.ToInt32(Console.ReadLine());
+                    switch (input)
+                    {
+                        case 0:
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("Exiting . . .");
+                            Console.ResetColor();
+                            break;
+                        case 1:
+                            OutputAllRecords();
+                            break;
+                        case 2:
+                            OutputMinCal();
+                            break;
+                        case 3:
+                            Console.Write("Enter type: ");
+                            string type = Console.ReadLine();
+                            OutputByType(type);
+                            break;
+                        case 4:
+                            Console.Write("Enter calories: ");
+                            int cal = Convert.ToInt32(Console.ReadLine());
+                            OutputBelowCal(cal);
+                            break;
+                        default:
+                            Console.ForegroundColor = ConsoleColor.Red;
+                            Console.WriteLine("No such option present");
+                            Console.ResetColor();
+                            break;
+                    }
+                }
+                while (input != 0);
             }
-            catch (Exception e)
+            catch(Exception e)
             {
                 Console.ForegroundColor = ConsoleColor.DarkRed;
-                Console.WriteLine(e.Message);
-                Console.ResetColor();
+                Console.WriteLine(e.Message + ". Closing connection");
             }
         }
-        private static void OutputRecords(DataTable table)
+        static void Main()
         {
-            Console.WriteLine("\n\t\t===== LIST OF ITEMS =====");
-            foreach(DataRow row in table.Rows)
-            {
-                if ((string)row["type"] == "Fruit") Console.ForegroundColor = ConsoleColor.DarkYellow;
-                else Console.ForegroundColor = ConsoleColor.Green;
-
-                Console.WriteLine($"Name: {row["Name"]} | Type: {row["Type"]} | Color: {row["Color"]} | Calories: {row["Calories"]}");
-            }
-            Console.ResetColor();
+            RunMainMenu();
         }
-
-        private static DataTable GetRecords(string connectionString)
+        private static void OutputBelowCal(int cal)
         {
-            List<string> records = new List<string>();
-            DataTable table = new DataTable();
-            string query = "Select Name, Type, Color, Calories from Items";
             try
             {
-                using (SqlConnection connection = new SqlConnection(connectionString))
+                using (DbConnection connection = new SqlConnection(connectionString))
                 {
+                    string query = $"Select * from Items where Items.Calories < {cal}";
+                    DbCommand command = new SqlCommand(query, (SqlConnection)connection);
+
                     connection.Open();
-                    SqlDataAdapter adapter = new SqlDataAdapter(query, connection);
-                    adapter.Fill(table);
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Database connection is open");
+                    Console.ResetColor();
+
+                    using(DbDataReader reader = command.ExecuteReader())
+                    {
+                        Console.ForegroundColor = ConsoleColor.DarkYellow;
+                        Console.WriteLine($"Inquired calories amount: '{cal}'");
+                        Console.ResetColor();
+                        Console.WriteLine("{0, -5} {1, -10} {2, -10} {3, -10} {4, -10}", "Id", "Name", "Type", "Color", "Calories");
+                        Console.WriteLine(new string('-', 60));
+                        while (reader.Read())
+                        {
+                            Console.WriteLine("{0, -5} {1, -10} {2, -10} {3, -10} {4, -10}", reader["Id"], reader["Name"], reader["Type"], reader["Color"], reader["Calories"]);
+                        }
+                    }
                 }
             }
             catch(Exception e)
             {
                 Console.ForegroundColor = ConsoleColor.DarkRed;
-                Console.WriteLine(e.Message);
+                Console.WriteLine(e.Message + ". Closing connection");
                 Console.ResetColor();
             }
-            return table;
+        }
+        private static void OutputMinCal()
+        {
+            try
+            {
+                using(DbConnection connection = new SqlConnection(connectionString))
+                {
+                    string query = "Select MIN(Items.Calories) from Items";
+                    DbCommand command = new SqlCommand(query, (SqlConnection)connection);
+                    
+                    connection.Open();
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Database connection is open");
+                    Console.ResetColor();
+
+                    int minCal = Convert.ToInt32(command.ExecuteScalar());
+                    Console.ForegroundColor = ConsoleColor.DarkMagenta;
+                    Console.WriteLine("Minimum of calories present in the table: " + minCal);
+                    Console.ResetColor();
+                }
+            }
+            catch(Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.WriteLine(e.Message + ". Closing connection");
+                Console.ResetColor();
+            }
+        }
+        private static void OutputByType(string type)
+        {
+            try
+            {
+                if (type != "vegetable" && type != "Fruit")
+                {
+                    throw new Exception("No such type available exception");
+                }
+                using (DbConnection connection = new SqlConnection(connectionString))
+                {
+                    string query = $"Select * From Items Where Type='{type}'";
+                    string query2 = $"Select Count(*) from Items Where Items.Type = '{type}'";
+                    DbCommand command = new SqlCommand(query, (SqlConnection)connection);
+                    DbCommand command2 = new SqlCommand(query2, (SqlConnection)connection);
+
+                    connection.Open();
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Database connection is open");
+                    Console.ResetColor();
+
+                    int count = Convert.ToInt32(command2.ExecuteScalar());
+                    Console.WriteLine("\nCount: " + count);
+                    using (DbDataReader reader = command.ExecuteReader())
+                    {
+                        Console.ForegroundColor = ConsoleColor.DarkYellow;
+                        Console.WriteLine($"Inquired type: '{type}'");
+                        Console.ResetColor();
+                        Console.WriteLine("{0, -5} {1, -10} {2, -10} {3, -10} {4, -10}", "Id", "Name", "Type", "Color", "Calories");
+                        Console.WriteLine(new string('-', 60));
+                        while (reader.Read())
+                        {
+                            Console.WriteLine("{0, -5} {1, -10} {2, -10} {3, -10} {4, -10}", reader["Id"], reader["Name"], reader["Type"], reader["Color"], reader["Calories"]);
+                        }
+                    }
+
+                }
+            }
+            catch(Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.WriteLine(e.Message + ". Closing connection");
+                Console.ResetColor();
+            }
+
+        }
+        private static void OutputAllRecords()
+        {
+            try
+            {
+                using(DbConnection connection = new SqlConnection(connectionString))
+                {
+                    string query = "Select * from Items";
+                    DbCommand command = new SqlCommand(query, (SqlConnection)connection);
+
+                    connection.Open();
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Database connection is open");
+                    Console.ResetColor();
+
+                    using(DbDataReader  reader = (SqlDataReader)command.ExecuteReader())
+                    {
+                        Console.WriteLine("\n{0, -5} {1, -10} {2, -10} {3, -10} {4, -10}", "Id", "Name", "Type", "Color", "Calories");
+                        Console.WriteLine(new string('-', 60));
+                        while(reader.Read())
+                        {
+                            Console.WriteLine("{0, -5} {1, -10} {2, -10} {3, -10} {4, -10}", reader["Id"], reader["Name"], reader["Type"], reader["Color"], reader["Calories"]);
+                        }
+                    }
+                    Console.WriteLine();
+                }
+            }
+            catch(Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.DarkRed;
+                Console.WriteLine(e.Message + ". Closing connection");
+                Console.ResetColor();
+            }
         }
     }
 }
